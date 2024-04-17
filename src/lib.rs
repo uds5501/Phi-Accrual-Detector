@@ -21,6 +21,16 @@ pub struct Detector {
     statistics: RwLock<Statistics>,
 }
 
+impl Detector {
+    pub fn new(window_length: u32) -> Self {
+        Detector {
+            mean: 0.0,
+            variance: 0.0,
+            statistics: RwLock::new(Statistics::new(window_length)),
+        }
+    }
+}
+
 impl Statistics {
     pub fn new(window_length: u32) -> Self {
         Self {
@@ -56,36 +66,19 @@ impl Statistics {
 
 #[async_trait]
 trait PhiCore {
-    //TODO: cleanup
-    async fn mean(&self) -> Result<f64, Box<dyn Error>>;
     async fn mean_with_stats<'a>(&self, stats: Arc<RwLockReadGuard<'a, Statistics>>) -> Result<f64, Box<dyn Error>>;
-
-    //TODO: cleanup
-    async fn variance(&self) -> Result<f64, Box<dyn Error>>;
     async fn variance_and_mean(&self) -> Result<(f64, f64), Box<dyn Error>>;
-
-    async fn last_arrived_at(&self) -> Result<DateTime<Local>, Box<dyn Error>>;
 }
 
 #[async_trait]
 pub trait PhiInteraction {
     async fn insert(&self, arrived_at: DateTime<Local>) -> Result<(), Box<dyn Error>>;
     async fn phi(&self, t: DateTime<Local>) -> Result<f64, Box<dyn Error>>;
+    async fn last_arrived_at(&self) -> Result<DateTime<Local>, Box<dyn Error>>;
 }
 
 #[async_trait]
 impl PhiCore for Detector {
-    async fn mean(&self) -> Result<f64, Box<dyn Error>> {
-        let mut mean: f64 = 0.;
-        let stats = self.statistics.read().await;
-        let len = &stats.arrival_intervals.len();
-        for v in &stats.arrival_intervals {
-            let val = *v as f64 / *len as f64;
-            mean += val;
-        }
-        Ok(mean)
-    }
-
     async fn mean_with_stats<'a>(&self, stats: Arc<RwLockReadGuard<'a, Statistics>>) -> Result<f64, Box<dyn Error>> {
         let mut mean: f64 = 0.;
         let len = &stats.arrival_intervals.len();
@@ -93,18 +86,6 @@ impl PhiCore for Detector {
             mean += *v as f64 / *len as f64;
         }
         Ok(mean)
-    }
-
-    async fn variance(&self) -> Result<f64, Box<dyn Error>> {
-        let mut variance: f64 = 0.;
-        let stats = Arc::new(self.statistics.read().await);
-        let mu = self.mean_with_stats(Arc::clone(&stats)).await?;
-        let len = &stats.arrival_intervals.len();
-        for v in &stats.arrival_intervals {
-            let val = ((*v as f64 - mu) * (*v as f64 - mu)) / *len as f64;
-            variance += val;
-        }
-        Ok(variance)
     }
 
     async fn variance_and_mean(&self) -> Result<(f64, f64), Box<dyn Error>> {
@@ -118,13 +99,18 @@ impl PhiCore for Detector {
         }
         Ok((variance, mu))
     }
-
-    async fn last_arrived_at(&self) -> Result<DateTime<Local>, Box<dyn Error>> {
-        Ok(self.statistics.read().await.last_arrived_at)
-    }
 }
 
 fn normal_cdf(t: f64, mu: f64, sigma: f64) -> f64 {
+
+    if sigma == 0. {
+        return if t == mu {
+            1.
+        } else {
+            0.
+        };
+    }
+
     let z = (t - mu) / sigma;
     0.5 + 0.5 * (erf(z))
 }
@@ -144,6 +130,10 @@ impl PhiInteraction for Detector {
         let ft = normal_cdf(t.sub(last_arrived_at).num_milliseconds() as f64, mu, sigma);
         let phi = -log10(1. - ft);
         Ok(phi)
+    }
+
+    async fn last_arrived_at(&self) -> Result<DateTime<Local>, Box<dyn Error>> {
+        Ok(self.statistics.read().await.last_arrived_at)
     }
 }
 
@@ -177,6 +167,16 @@ mod tests {
         variance = (variance * 100.0).round() * 0.01;
         assert_eq!(1707.4, mean);
         assert_eq!(3755791.64, variance);
+
+        let mut suspicion_level: Vec<f64> = vec![];
+        for i in 1..10 {
+            curr_time = curr_time.add(Duration::milliseconds(250));
+            suspicion_level.push(detector.phi(curr_time).await.unwrap())
+        }
+        println!("suspicion -> {:?}", suspicion_level);
+        for i in 1..suspicion_level.len() {
+            assert!(suspicion_level[i] > suspicion_level[i - 1]);
+        }
     }
 
 
@@ -196,13 +196,12 @@ mod tests {
             curr_time = curr_time.add(Duration::milliseconds(10));
             i += 10;
         }
-        let mut mean = detector.mean().await.unwrap();
+        let (mut variance, mut mean) = detector.variance_and_mean().await.unwrap();
         mean = (mean * 100.0).round() * 0.01;
-        let mut variance = detector.variance().await.unwrap();
         variance = (variance * 100.0).round() * 0.01;
         assert_eq!(10., mean);
         assert_eq!(0., variance);
         curr_time = curr_time.add(Duration::milliseconds(10));
-        assert_eq!(f64::INFINITY, detector.phi(curr_time).await.unwrap())
+        assert_eq!(0., detector.phi(curr_time).await.unwrap());
     }
 }
