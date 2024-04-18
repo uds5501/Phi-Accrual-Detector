@@ -16,16 +16,12 @@ pub struct Statistics {
 
 #[derive(Debug)]
 pub struct Detector {
-    mean: f64,
-    variance: f64,
     statistics: RwLock<Statistics>,
 }
 
 impl Detector {
     pub fn new(window_length: u32) -> Self {
         Detector {
-            mean: 0.0,
-            variance: 0.0,
             statistics: RwLock::new(Statistics::new(window_length)),
         }
     }
@@ -124,7 +120,7 @@ impl PhiInteraction for Detector {
     }
 
     async fn phi(&self, t: DateTime<Local>) -> Result<f64, Box<dyn Error>> {
-        let (mut sigma_sq, mu) = self.variance_and_mean().await?;
+        let (sigma_sq, mu) = self.variance_and_mean().await?;
         let sigma = sigma_sq.sqrt();
         let last_arrived_at = self.last_arrived_at().await?;
         let ft = normal_cdf(t.sub(last_arrived_at).num_milliseconds() as f64, mu, sigma);
@@ -158,8 +154,6 @@ mod tests {
             i += 1;
         }
         let detector = Detector {
-            mean: 0.0,
-            variance: 0.0,
             statistics: RwLock::new(stats),
         };
         let (mut variance, mut mean) = detector.variance_and_mean().await.unwrap();
@@ -184,8 +178,6 @@ mod tests {
     async fn test_constant_phi_with_constant_pings_calculation() {
         let stats = Statistics::new(10);
         let detector = Detector {
-            mean: 0.0,
-            variance: 0.0,
             statistics: RwLock::new(stats),
         };
         let mut i = 0;
