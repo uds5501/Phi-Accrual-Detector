@@ -1,7 +1,7 @@
 # Phi Accrual Detector
 
 ### Introduction
-This is a pluggable implementation of phi accrual detection algorithm in Rust. 
+This is a pluggable implementation of phi accrual detection algorithm (introduced in this [paper](https://www.researchgate.net/publication/29682135_The_ph_accrual_failure_detector)) in Rust. 
 The algorithm is used to detect changes in the behavior of a system by monitoring the time between events. 
 Let's say you want to monitor whether the server is alive or not (imagine a master / slave setup), and you want to check
 if the slave is still up or not? **How would you do it?**
@@ -17,12 +17,14 @@ time between events and calculating the probability that the system has failed. 
 observation that the time between events in a healthy system follows a normal distribution, while the time between 
 events in a failed system follows a distribution with a longer tail.
 
-**The higher the φ, the lower the chances of receiving a heartbeat at a given time**
+**The higher the φ, the lower the chances of receiving a heartbeat at a given time** (the formal definition is described below)
 
-```math
-$$\phi = -\log_{10}(1 - F(t))$$
-$$F(t) = \frac{1}{2}\left[1 + \text{erf}\left(\frac{t - \mu}{\sqrt{2}\sigma}\right)\right]$$
-```
+![img.png](docs/phi_definition.png)
+
+![img.png](docs/erf.png)
+
+Where `F(t)` is the cumulative distribution function of the normal distribution, `μ` is the mean of the normal distribution, 
+`σ` is the standard deviation of the normal distribution, and `t` is the time between events.
 
 ### Example Run
 You can use the examples/monitor.rs to emulate the following result. the graph signifies that the suspicion level
