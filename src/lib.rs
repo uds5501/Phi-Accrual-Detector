@@ -1,3 +1,39 @@
+//!
+//! This is a pluggable implementation of the Phi Accrual Failure Detector.
+//!
+//! The simplest implementation to use it in your system has been shown in the examples/monitor.rs
+//!
+//! ```rust
+//!use phi_accrual_detector::{Detector};
+//!use async_trait::async_trait;
+//!use std::sync::{Arc};
+//!use chrono::{DateTime, Local};
+//!
+//!struct Monitor {
+//!    detector: Arc<Detector>,
+//!}
+//!#[async_trait]
+//!trait MonitorInteraction {
+//!    // For inserting heartbeat arrival time
+//!    async fn ping(&self);
+//!    // For calculating suspicion level
+//!    async fn suspicion(&self) -> f64;
+//!}
+//!#[async_trait]
+//!impl MonitorInteraction for Monitor {
+//!     async fn ping(&self) {
+//!         let current_time = Local::now();
+//!         self.detector.insert(current_time).await.expect("Some panic occurred");
+//!    }
+//!
+//!    async fn suspicion(&self) -> f64 {
+//!        let current_time = Local::now();
+//!        let last_arrived_at = self.detector.last_arrived_at().await.expect("Some panic occurred");
+//!        let phi = self.detector.phi(current_time).await.unwrap();
+//!        phi
+//!    }
+//!}
+//! ```
 use std::error::Error;
 use std::ops::Sub;
 use std::sync::{Arc};
@@ -6,6 +42,7 @@ use async_trait::async_trait;
 use libm::{erf, log10};
 use chrono::{DateTime, Local};
 
+/// Statistics of last window_length intervals
 #[derive(Clone, Debug)]
 pub struct Statistics {
     arrival_intervals: Vec<u64>,
@@ -14,12 +51,14 @@ pub struct Statistics {
     n: u32,
 }
 
+/// Detector meant for abstraction over Statistics
 #[derive(Debug)]
 pub struct Detector {
     statistics: RwLock<Statistics>,
 }
 
 impl Detector {
+    /// New Detector instance with window_length. Recommended window_length is < 10000
     pub fn new(window_length: u32) -> Self {
         Detector {
             statistics: RwLock::new(Statistics::new(window_length)),
@@ -28,6 +67,7 @@ impl Detector {
 }
 
 impl Statistics {
+    /// New Statistics instance with window_length.
     pub fn new(window_length: u32) -> Self {
         Self {
             arrival_intervals: vec![],
@@ -37,6 +77,7 @@ impl Statistics {
         }
     }
 
+    /// Insert heartbeat arrival time in window.
     pub fn insert(&mut self, arrived_at: DateTime<Local>) {
 
         // insert first element
@@ -60,19 +101,30 @@ impl Statistics {
     }
 }
 
+/// PhiCore trait for mean and variance calculation
 #[async_trait]
 trait PhiCore {
+    /// Calculate mean with existing stats.
     async fn mean_with_stats<'a>(&self, stats: Arc<RwLockReadGuard<'a, Statistics>>) -> Result<f64, Box<dyn Error>>;
+
+    /// Calculate variance and mean with existing stats.
     async fn variance_and_mean(&self) -> Result<(f64, f64), Box<dyn Error>>;
 }
 
+/// PhiInteraction trait for Detector
 #[async_trait]
 pub trait PhiInteraction {
+    /// Insertion of heartbeat arrival time.
     async fn insert(&self, arrived_at: DateTime<Local>) -> Result<(), Box<dyn Error>>;
+
+    /// Trait for phi for implementing struct
     async fn phi(&self, t: DateTime<Local>) -> Result<f64, Box<dyn Error>>;
+
+    /// Last arrival time of heartbeat
     async fn last_arrived_at(&self) -> Result<DateTime<Local>, Box<dyn Error>>;
 }
 
+/// Implementation of PhiCore for Detector
 #[async_trait]
 impl PhiCore for Detector {
     async fn mean_with_stats<'a>(&self, stats: Arc<RwLockReadGuard<'a, Statistics>>) -> Result<f64, Box<dyn Error>> {
@@ -97,6 +149,7 @@ impl PhiCore for Detector {
     }
 }
 
+/// Cumulative distribution function for normal distribution
 fn normal_cdf(t: f64, mu: f64, sigma: f64) -> f64 {
 
     if sigma == 0. {
@@ -111,6 +164,7 @@ fn normal_cdf(t: f64, mu: f64, sigma: f64) -> f64 {
     0.5 + 0.5 * (erf(z))
 }
 
+/// Implementation of PhiInteraction for Detector
 #[async_trait]
 impl PhiInteraction for Detector {
     async fn insert(&self, arrived_at: DateTime<Local>) -> Result<(), Box<dyn Error>> {

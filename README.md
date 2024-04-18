@@ -19,10 +19,15 @@ events in a failed system follows a distribution with a longer tail.
 
 **The higher the φ, the lower the chances of receiving a heartbeat at a given time**
 
-**The Cauchy-Schwarz Inequality**
-
 ```math
-\left( \sum_{k=1}^n a_k b_k \right)^2 \leq \left( \sum_{k=1}^n a_k^2 \right) \left( \sum_{k=1}^n b_k^2 \right)
+$$\phi = -\log_{10}(1 - F(t))$$
+$$F(t) = \frac{1}{2}\left[1 + \text{erf}\left(\frac{t - \mu}{\sqrt{2}\sigma}\right)\right]$$
 ```
 
-### Using example
+### Example Run
+You can use the examples/monitor.rs to emulate the following result. the graph signifies that the suspicion level
+is generally low if the process keeps pinging the monitor until it crashed at the red line. After that the suspicion
+level increases exponentially and goes to infinity. You can configure any threshold (ex : `> 5.0`) to consider the process
+as dead.
+
+![img.png](docs/img.png)

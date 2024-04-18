@@ -1,6 +1,6 @@
 [package]
 name = "phi-accrual-detector"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Uddeshya Singh <singhuddeshyaofficial@gmail.com>"]
 rust-version = "1.71.0"
