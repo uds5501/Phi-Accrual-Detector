@@ -33,3 +33,9 @@ level increases exponentially and goes to infinity. You can configure any thresh
 as dead.
 
 ![img.png](docs/img.png)
+
+### Including acceptable heartbeat pauses
+You can also include some pause durations to ensure that the system is not considered dead if it's just slightly late due to
+network latencies. You can utilize `::with_acceptable_heartbeat_pause` to create a detector with acceptable pause durations.
+
+![with_acceptable_pause.png](docs/img_pause.png)
