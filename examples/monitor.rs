@@ -1,4 +1,4 @@
-use std::fs::{File, OpenOptions};
+use std::fs::{OpenOptions};
 use std::io::Write;
 use std::sync::{Arc};
 use std::thread;
@@ -6,7 +6,7 @@ use async_std::task;
 
 use std::time::Duration;
 use async_trait::async_trait;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, TimeDelta};
 use rand::Rng;
 use tokio::sync::RwLock;
 use phi_accrual_detector::{Detector, PhiInteraction};
@@ -76,7 +76,7 @@ impl MonitorInteraction for Monitor {
 
 #[tokio::main]
 async fn main() {
-    let detector = Arc::new(Detector::new(1000));
+    let detector = Arc::new(Detector::with_acceptable_pause(1000, TimeDelta::milliseconds(1000)));
     let monitor = Arc::new(Monitor::new(detector.clone()));
     let monitor_phi = Arc::clone(&monitor);
 
@@ -88,7 +88,7 @@ async fn main() {
             .block_on(async {
                 loop {
                     let dur = rand::thread_rng().gen_range(100..1000);
-                    if dur > 900 {
+                    if dur > 950 {
                         println!("Simulating shutdown at: {:?}", Local::now().to_rfc3339());
                         break;
                     }
@@ -106,13 +106,17 @@ async fn main() {
             .unwrap()
             .block_on(async {
                 let mut i = 0;
+                task::sleep(Duration::from_millis(500)).await;
                 loop {
                     // Simulate the "ping" process
                     task::sleep(Duration::from_millis(200)).await;
-                    monitor_phi.suspicion().await;
+                    let p = monitor_phi.suspicion().await;
                     if i % 10 == 0 {
                         // monitor_phi.show_history().await;
                         monitor_phi.publish_csv("history.csv").await;
+                        if p == f64::INFINITY {
+                            break;
+                        }
                     }
                     i += 1;
                 }

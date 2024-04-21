@@ -1,13 +1,13 @@
 [package]
 name = "phi-accrual-detector"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 authors = ["Uddeshya Singh <singhuddeshyaofficial@gmail.com>"]
 rust-version = "1.71.0"
 description = "Pluggable phi-accrual-detection package for healthcheck of monitored processes"
 readme = "README.md"
 repository = "https://github.com/uds5501/phi-accrual-detector"
-keywords = ["phi-accrual", "healtcheck", "detector", "monitoring", "distributed-system"]
+keywords = ["phi-accrual", "healthcheck", "detector", "monitoring", "distributed-system"]
 categories = ["algorithms"]
 license = "MIT"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

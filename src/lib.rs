@@ -12,6 +12,7 @@
 //!struct Monitor {
 //!    detector: Arc<Detector>,
 //!}
+//!
 //!#[async_trait]
 //!trait MonitorInteraction {
 //!    // For inserting heartbeat arrival time
@@ -19,6 +20,7 @@
 //!    // For calculating suspicion level
 //!    async fn suspicion(&self) -> f64;
 //!}
+//!
 //!#[async_trait]
 //!impl MonitorInteraction for Monitor {
 //!     async fn ping(&self) {
@@ -29,18 +31,49 @@
 //!    async fn suspicion(&self) -> f64 {
 //!        let current_time = Local::now();
 //!        let last_arrived_at = self.detector.last_arrived_at().await.expect("Some panic occurred");
+//!        // you can determine an acceptable threshold (ex:0.5) for phi after which you can take action.
 //!        let phi = self.detector.phi(current_time).await.unwrap();
 //!        phi
 //!    }
 //!}
+//!
+//! fn main() {
+//!   let detector = Arc::new(Detector::new(1000));
+//!   let monitor = Monitor { detector: Arc::clone(&detector) };
+//! }
 //! ```
+//!
+//! The above example gives you an implementation of a Monitor struct which can be used to interact
+//! with the Detector struct. However, if you want to give your process some leeway to recover from
+//! a failure or account in the network latencies, you can set an acceptable pause duration during
+//! which the detector will not raise suspicion. You can tweak the detector in the above example like
+//! this:
+//!
+//! ```rust
+//! use phi_accrual_detector::{Detector};
+//! use async_trait::async_trait;
+//! use std::sync::{Arc};
+//! use chrono::{TimeDelta};
+//!
+//! struct Monitor {
+//!    detector: Arc<Detector>,
+//! }
+//!
+//! // implementation and traits remain the same.
+//!
+//! fn main() {
+//!   let detector = Arc::new(Detector::with_acceptable_pause(1000, TimeDelta::milliseconds(1000)));
+//!   let monitor = Monitor { detector: Arc::clone(&detector) };
+//! }
+//! ```
+//!
 use std::error::Error;
 use std::ops::Sub;
 use std::sync::{Arc};
 use tokio::sync::{RwLock, RwLockReadGuard};
 use async_trait::async_trait;
 use libm::{erf, log10};
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, TimeDelta};
 
 /// Statistics of last window_length intervals
 #[derive(Clone, Debug)]
@@ -55,6 +88,7 @@ pub struct Statistics {
 #[derive(Debug)]
 pub struct Detector {
     statistics: RwLock<Statistics>,
+    acceptable_pause: TimeDelta,
 }
 
 impl Detector {
@@ -62,6 +96,15 @@ impl Detector {
     pub fn new(window_length: u32) -> Self {
         Detector {
             statistics: RwLock::new(Statistics::new(window_length)),
+            acceptable_pause: TimeDelta::milliseconds(0),
+        }
+    }
+
+    /// New Detector instance with acceptable heartbeat pause duration.
+    pub fn with_acceptable_pause(window_length: u32, acceptable_pause: TimeDelta) -> Self {
+        Detector {
+            statistics: RwLock::new(Statistics::new(window_length)),
+            acceptable_pause,
         }
     }
 }
@@ -151,7 +194,6 @@ impl PhiCore for Detector {
 
 /// Cumulative distribution function for normal distribution
 fn normal_cdf(t: f64, mu: f64, sigma: f64) -> f64 {
-
     if sigma == 0. {
         return if t == mu {
             1.
@@ -177,7 +219,8 @@ impl PhiInteraction for Detector {
         let (sigma_sq, mu) = self.variance_and_mean().await?;
         let sigma = sigma_sq.sqrt();
         let last_arrived_at = self.last_arrived_at().await?;
-        let ft = normal_cdf(t.sub(last_arrived_at).num_milliseconds() as f64, mu, sigma);
+        let time_diff = t.sub(last_arrived_at).sub(self.acceptable_pause);
+        let ft = normal_cdf(time_diff.num_milliseconds() as f64, mu, sigma);
         let phi = -log10(1. - ft);
         Ok(phi)
     }
@@ -190,7 +233,7 @@ impl PhiInteraction for Detector {
 #[cfg(test)]
 mod tests {
     use std::ops::Add;
-    use chrono::{Duration, Local};
+    use chrono::{Duration, Local, TimeDelta};
     use tokio::sync::RwLock;
     use crate::{Detector, PhiCore, PhiInteraction, Statistics};
 
@@ -209,6 +252,7 @@ mod tests {
         }
         let detector = Detector {
             statistics: RwLock::new(stats),
+            acceptable_pause: TimeDelta::milliseconds(0),
         };
         let (mut variance, mut mean) = detector.variance_and_mean().await.unwrap();
         mean = (mean * 100.0).round() * 0.01;
@@ -227,12 +271,12 @@ mod tests {
         }
     }
 
-
     #[tokio::test]
     async fn test_constant_phi_with_constant_pings_calculation() {
         let stats = Statistics::new(10);
         let detector = Detector {
             statistics: RwLock::new(stats),
+            acceptable_pause: TimeDelta::milliseconds(0),
         };
         let mut i = 0;
         let mut curr_time = Local::now();
