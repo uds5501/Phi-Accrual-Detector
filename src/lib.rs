@@ -4,7 +4,7 @@
 //! The simplest implementation to use it in your system has been shown in the examples/monitor.rs
 //!
 //! ```rust
-//!use phi_accrual_detector::{Detector};
+//!use phi_accrual_detector::{Detector, PhiInteraction};
 //!use async_trait::async_trait;
 //!use std::sync::{Arc};
 //!use chrono::{DateTime, Local};
