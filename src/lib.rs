@@ -242,12 +242,12 @@ mod tests {
         let mut stats = Statistics::new(10);
         let mut i = 0;
         let mut curr_time = Local::now();
-        &stats.insert(curr_time.clone());
+        let _ = &stats.insert(curr_time.clone());
         let expect_vals = [1630, 4421, 1514, 216, 231, 931, 4182, 102, 104, 241, 5132];
         while i < expect_vals.len() {
             curr_time = curr_time.add(Duration::milliseconds(expect_vals[i]));
             let arrived_at = curr_time;
-            &stats.insert(arrived_at);
+            let _ = &stats.insert(arrived_at);
             i += 1;
         }
         let detector = Detector {
@@ -261,7 +261,7 @@ mod tests {
         assert_eq!(3755791.64, variance);
 
         let mut suspicion_level: Vec<f64> = vec![];
-        for i in 1..10 {
+        for _i in 1..10 {
             curr_time = curr_time.add(Duration::milliseconds(250));
             suspicion_level.push(detector.phi(curr_time).await.unwrap())
         }
@@ -282,7 +282,7 @@ mod tests {
         let mut curr_time = Local::now();
         while i <= 100 {
             let arrived_at = curr_time;
-            &detector.insert(arrived_at).await;
+            let _ = &detector.insert(arrived_at).await;
             curr_time = curr_time.add(Duration::milliseconds(10));
             i += 10;
         }
